@@ -85,22 +85,11 @@ jobs:
     - name: Build Firmware
       run: pio run
 
-    # Baue das Filesystem-Image
-    #- name: Build Filesystem Image
-    #  run: pio run -t buildfs
-
-    # Erstelle das Tar-Archiv
-    #- name: Create spiffs.tar
-    #  run: |
-    #    mkdir -p lastVersion
-    #    tar --transform='s/^data\///' --exclude='data/config' -cf lastVersion/spiffs.tar -C data www sys
-
     # Verschiebe die erzeugten Dateien in lastVersion
     - name: Move build artifacts
       run: |
-        cp .pio/build/*/firmware.bin lastVersion/
+        cp .pio/build/*/firmware.hex lastVersion/
         cp .pio/build/*/firmware.elf lastVersion/
-        # cp .pio/build/*/spiffs.bin lastVersion/
 
     # Commit und push der geänderten version.h und Artefakte ins Repository
     - name: Commit and push changes
@@ -115,10 +104,8 @@ jobs:
         echo git checkout $CURRENT_BRANCH
         git checkout $CURRENT_BRANCH
         mkdir -p artifacts
-        cp lastVersion/firmware.bin artifacts/
+        cp lastVersion/firmware.hex artifacts/
         cp lastVersion/firmware.elf artifacts/
-        # cp lastVersion/spiffs.tar artifacts/
-        # cp lastVersion/spiffs.bin artifacts/
         git add artifacts/
 
         # Überprüfen, ob es ein Release-Tag gibt und version.h hinzufügen
@@ -139,8 +126,6 @@ jobs:
       with:
         tag: "release-${{ env.version }}"
         artifacts: |
-          lastVersion/firmware.bin
+          lastVersion/firmware.hex
           lastVersion/firmware.elf
-          # lastVersion/spiffs.tar
-          # lastVersion/spiffs.bin
         token: ${{ secrets.GITHUB_TOKEN }}
