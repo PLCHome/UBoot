@@ -7,6 +7,7 @@
 #include <Adafruit_MCP4725.h>
 #include <Adafruit_SH1106.h>
 #include <EEPROM.h>
+#include "version.h"
 
 #define LCD_COLUMNS 21
 #define LCD_LINES 4
@@ -162,6 +163,11 @@ void setup() {
   display.setTextSize(1);             // Normal 1:1 pixel scale
   display.setTextColor(WHITE, BLACK); // Draw white text
   display.setCursor(0, 0);            // Start at top-left corner
+  display.print(VERSION);
+  display.display();
+  delay(1000);
+  display.clearDisplay();
+  display.display();
 }
 
 void changemode(bool s) {

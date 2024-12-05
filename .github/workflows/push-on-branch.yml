@@ -1,0 +1,17 @@
+
+name: Push to Branches
+
+on:
+  push:
+    branches:
+      - '**'  # Wird bei jedem Commit auf einem beliebigen Branch ausgelöst
+    paths-ignore:
+      - '.github/**'
+      - '.vscode/**'
+      - 'artifacts/**'
+      - 'src/version.h'
+
+jobs:
+  build:
+    uses: ./.github/workflows/build_firmware.yml
+

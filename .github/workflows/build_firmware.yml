@@ -1,0 +1,146 @@
+name: Build Firmware
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Repository auschecken
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    # Überprüfen, ob ein Tag vorhanden ist
+    - name: Detect tag
+      id: detect_tag
+      run: |
+        CURRENT_BRANCH=$(echo "${GITHUB_REF}" | sed 's/refs\/heads\///;s/refs\/tags\///')
+        echo "Detected branch: $CURRENT_BRANCH"
+        if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          echo "Detected tag: $TAG_NAME"
+          CURRENT_BRANCH=main
+          echo "is_tag=true" >> $GITHUB_ENV
+          echo "tag_name=$TAG_NAME" >> $GITHUB_ENV
+        else
+          echo "No tag detected."
+          echo "is_tag=false" >> $GITHUB_ENV
+        fi
+        echo "Current branch: $CURRENT_BRANCH"
+        echo "current_branch=$CURRENT_BRANCH" >> $GITHUB_ENV
+
+    # Validierung des Tags (nur wenn ein Tag vorhanden ist)
+    - name: Validate tag
+      if: env.is_tag == 'true'
+      id: validate_tag
+      run: |
+        if [[ "${tag_name}" =~ ^release-([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+          VERSION="${BASH_REMATCH[1]}"
+          echo "Valid release tag detected: $VERSION"
+          echo "is_release=true" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_ENV
+        else
+          echo "Invalid tag format. Expected 'release-x.x.x'."
+          echo "is_release=false" >> $GITHUB_ENV
+          exit 1 # Abbruch bei falschem Tag-Format
+        fi
+
+    - name: Merge release to main
+      id: merge_to_release
+      if: env.is_tag == 'true'
+      env:
+        CURRENT_BRANCH: ${{ env.current_branch }}
+      run: |
+        git fetch origin $CURRENT_BRANCH
+        git checkout $CURRENT_BRANCH
+        git merge $GITHUB_REF
+        git push origin $CURRENT_BRANCH
+
+    # Installiere Python und PlatformIO
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install PlatformIO
+      run: |
+        python -m pip install --upgrade pip
+        pip install platformio
+
+    # Update version.h (nur bei Release-Tag)
+    - name: Update version.h
+      if: env.is_release == 'true'
+      env:
+        VERSION: ${{ env.version }}
+      run: |
+        echo "version.h set to version: $VERSION"
+        sed -i "s/#define VERSION.*/#define VERSION \"$VERSION\"/" src/version.h
+        cat src/version.h
+        mkdir -p version
+        cp src/version.h version/version.h
+
+    # Baue das Firmware-Image
+    - name: Build Firmware
+      run: pio run
+
+    # Baue das Filesystem-Image
+    #- name: Build Filesystem Image
+    #  run: pio run -t buildfs
+
+    # Erstelle das Tar-Archiv
+    #- name: Create spiffs.tar
+    #  run: |
+    #    mkdir -p lastVersion
+    #    tar --transform='s/^data\///' --exclude='data/config' -cf lastVersion/spiffs.tar -C data www sys
+
+    # Verschiebe die erzeugten Dateien in lastVersion
+    - name: Move build artifacts
+      run: |
+        cp .pio/build/*/firmware.bin lastVersion/
+        cp .pio/build/*/firmware.elf lastVersion/
+        # cp .pio/build/*/spiffs.bin lastVersion/
+
+    # Commit und push der geänderten version.h und Artefakte ins Repository
+    - name: Commit and push changes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CURRENT_BRANCH: ${{ env.current_branch }}
+        is_release: ${{ env.is_release }}
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        echo github ref ${GITHUB_REF}
+        echo git checkout $CURRENT_BRANCH
+        git checkout $CURRENT_BRANCH
+        mkdir -p artifacts
+        cp lastVersion/firmware.bin artifacts/
+        cp lastVersion/firmware.elf artifacts/
+        # cp lastVersion/spiffs.tar artifacts/
+        # cp lastVersion/spiffs.bin artifacts/
+        git add artifacts/
+
+        # Überprüfen, ob es ein Release-Tag gibt und version.h hinzufügen
+        if [ "$is_release" = "true" ]; then
+          cp version/version.h src/version.h
+          cat src/version.h
+          git add src/version.h
+        fi
+
+        git commit -m "Add build artifacts $([ "$is_release" = "true" ] && echo "and update version.h [skip ci]") "
+        git push origin $CURRENT_BRANCH
+
+
+    # Release erstellen (nur bei einem gültigen Release-Tag)
+    - name: Create GitHub Release
+      if: env.is_release == 'true'
+      uses: ncipollo/release-action@v1
+      with:
+        tag: "release-${{ env.version }}"
+        artifacts: |
+          lastVersion/firmware.bin
+          lastVersion/firmware.elf
+          # lastVersion/spiffs.tar
+          # lastVersion/spiffs.bin
+        token: ${{ secrets.GITHUB_TOKEN }}

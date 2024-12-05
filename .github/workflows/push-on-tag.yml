@@ -1,0 +1,10 @@
+name: Push to Tags
+
+on:
+  push:
+    tags:
+      - 'release-*'  # Wird nur ausgelöst, wenn ein Tag mit "release-" gepusht wird
+
+jobs:
+  build:
+    uses: ./.github/workflows/build_firmware.yml
