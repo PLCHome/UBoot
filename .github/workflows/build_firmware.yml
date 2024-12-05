@@ -88,6 +88,7 @@ jobs:
     # Verschiebe die erzeugten Dateien in lastVersion
     - name: Move build artifacts
       run: |
+        mkdir -p lastVersion
         cp .pio/build/*/firmware.hex lastVersion/
         cp .pio/build/*/firmware.elf lastVersion/
 
